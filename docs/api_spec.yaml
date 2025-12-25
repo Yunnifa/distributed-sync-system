@@ -1,0 +1,540 @@
+openapi: 3.0.3
+info:
+  title: Distributed Synchronization System API
+  description: |
+    API untuk sistem sinkronisasi terdistribusi yang mengimplementasikan:
+    - Distributed Lock Manager (Raft-based)
+    - Distributed Queue System (Consistent Hashing)
+    - Distributed Cache Coherence (LRU + MESI-like)
+  version: 1.0.0
+  contact:
+    name: Distributed Systems Team
+    email: support@example.com
+
+servers:
+  - url: http://localhost:8001
+    description: Node 1
+  - url: http://localhost:8002
+    description: Node 2
+  - url: http://localhost:8003
+    description: Node 3
+
+tags:
+  - name: Node Info
+    description: Node information and health
+  - name: Raft Consensus
+    description: Raft consensus protocol endpoints
+  - name: Distributed Locks
+    description: Distributed lock management
+  - name: Distributed Queue
+    description: Distributed message queue
+  - name: Distributed Cache
+    description: Distributed cache with coherence
+  - name: Metrics
+    description: Performance metrics and monitoring
+
+paths:
+  /:
+    get:
+      tags:
+        - Node Info
+      summary: Get node information
+      description: Returns basic information about this node
+      responses:
+        '200':
+          description: Node information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Hello from Node node1"
+                  port:
+                    type: integer
+                    example: 8001
+                  peers:
+                    type: array
+                    items:
+                      type: string
+                    example: ["http://node2:8002", "http://node3:8003"]
+
+  /raft/request-vote:
+    post:
+      tags:
+        - Raft Consensus
+      summary: Request vote (internal Raft RPC)
+      description: Internal endpoint for Raft RequestVote RPC
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - term
+                - candidate_id
+              properties:
+                term:
+                  type: integer
+                  description: Candidate's term
+                candidate_id:
+                  type: string
+                  description: Candidate requesting vote
+                last_log_index:
+                  type: integer
+                  description: Index of candidate's last log entry
+                last_log_term:
+                  type: integer
+                  description: Term of candidate's last log entry
+      responses:
+        '200':
+          description: Vote response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  term:
+                    type: integer
+                  vote_granted:
+                    type: boolean
+
+  /raft/append-entries:
+    post:
+      tags:
+        - Raft Consensus
+      summary: Append entries (internal Raft RPC)
+      description: Internal endpoint for Raft AppendEntries RPC (heartbeat and log replication)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - term
+                - leader_id
+              properties:
+                term:
+                  type: integer
+                leader_id:
+                  type: string
+                entries:
+                  type: array
+                  items:
+                    type: object
+                prev_log_index:
+                  type: integer
+                prev_log_term:
+                  type: integer
+                leader_commit:
+                  type: integer
+      responses:
+        '200':
+          description: AppendEntries response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  term:
+                    type: integer
+                  success:
+                    type: boolean
+
+  /lock/{lock_name}:
+    post:
+      tags:
+        - Distributed Locks
+      summary: Acquire a distributed lock
+      description: Acquire a shared or exclusive lock. Automatically forwards to leader if needed.
+      parameters:
+        - name: lock_name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Name of the lock
+        - name: lock_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [shared, exclusive]
+            default: exclusive
+          description: Type of lock to acquire
+        - name: timeout
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+          description: Timeout in seconds
+      responses:
+        '200':
+          description: Lock acquired successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "lock acquired"
+                  lock_name:
+                    type: string
+                  lock_type:
+                    type: string
+                  owner:
+                    type: string
+                  leader:
+                    type: string
+        '409':
+          description: Deadlock detected
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '423':
+          description: Lock is held by another node
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: No leader elected or service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Distributed Locks
+      summary: Get lock status
+      description: Get the current status of a lock
+      parameters:
+        - name: lock_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lock status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lock_name:
+                    type: string
+                  status:
+                    type: string
+                    enum: [available, held]
+                  type:
+                    type: string
+                    enum: [shared, exclusive]
+                  owners:
+                    type: array
+                    items:
+                      type: string
+                  waiters:
+                    type: array
+                    items:
+                      type: array
+
+    delete:
+      tags:
+        - Distributed Locks
+      summary: Release a distributed lock
+      description: Release a lock held by this node
+      parameters:
+        - name: lock_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lock released successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  lock_name:
+                    type: string
+                  released_by:
+                    type: string
+                  granted_to:
+                    type: array
+                    items:
+                      type: string
+                    nullable: true
+        '403':
+          description: You don't own this lock
+        '404':
+          description: Lock not found
+
+  /locks:
+    get:
+      tags:
+        - Distributed Locks
+      summary: List all locks
+      description: Get information about all locks in the system
+      responses:
+        '200':
+          description: All locks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  locks:
+                    type: object
+                  wait_for_graph:
+                    type: object
+                  leader:
+                    type: string
+                  is_leader:
+                    type: boolean
+
+  /queue/{queue_name}:
+    post:
+      tags:
+        - Distributed Queue
+      summary: Produce message to queue
+      description: Add a message to the distributed queue
+      parameters:
+        - name: queue_name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Message payload (any JSON object)
+      responses:
+        '200':
+          description: Message produced successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  queue:
+                    type: string
+                  node:
+                    type: string
+                  message:
+                    type: object
+        '503':
+          description: Redis unavailable
+
+    get:
+      tags:
+        - Distributed Queue
+      summary: Consume message from queue
+      description: Retrieve a message from the queue (at-least-once delivery)
+      parameters:
+        - name: queue_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Message consumed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  node:
+                    type: string
+                  message:
+                    type: object
+                  ack_token:
+                    type: string
+                    description: Token to use for acknowledgment
+        '404':
+          description: Queue is empty
+        '503':
+          description: Redis unavailable
+
+  /queue/ack/{processing_queue}:
+    post:
+      tags:
+        - Distributed Queue
+      summary: Acknowledge message processing
+      description: Confirm that a message has been processed successfully
+      parameters:
+        - name: processing_queue
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The message that was processed
+      responses:
+        '200':
+          description: Message acknowledged
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /cache/{key}:
+    get:
+      tags:
+        - Distributed Cache
+      summary: Read from cache
+      description: Read a value from the distributed cache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache hit or miss
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key:
+                    type: string
+                  data:
+                    type: string
+                  source:
+                    type: string
+                    enum: [cache (LRU), database (cached for future)]
+                  cache_state:
+                    type: string
+                    enum: [M, S, I, unknown]
+        '404':
+          description: Data not found
+
+    post:
+      tags:
+        - Distributed Cache
+      summary: Write to cache
+      description: Write or update a value in the distributed cache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - data
+              properties:
+                data:
+                  type: string
+      responses:
+        '200':
+          description: Data updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  key:
+                    type: string
+                  new_data:
+                    type: string
+                  cache_state:
+                    type: string
+
+  /cache/invalidate/{key}:
+    post:
+      tags:
+        - Distributed Cache
+      summary: Invalidate cache entry (internal)
+      description: Internal endpoint called by other nodes to invalidate cache
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cache invalidated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  key:
+                    type: string
+
+  /metrics:
+    get:
+      tags:
+        - Metrics
+      summary: Get performance metrics
+      description: Get cache hit/miss statistics and other metrics
+      responses:
+        '200':
+          description: Metrics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  cache_hits:
+                    type: integer
+                  cache_misses:
+                    type: integer
+                  cache_stats:
+                    type: object
+                    properties:
+                      size:
+                        type: integer
+                      maxsize:
+                        type: integer
+                      states:
+                        type: object
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message

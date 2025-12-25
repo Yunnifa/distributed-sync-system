@@ -1,1 +1,230 @@
--e "__pycache__/\n.venv/\n.env.*\n!.env.example" 
+# ============================================================================
+# DISTRIBUTED SYNC SYSTEM - .gitignore
+# Tugas 2: Sistem Parallel dan Terdistribusi
+# ============================================================================
+# This .gitignore keeps only essential files as per assignment requirements
+# PBFT bonus feature is included
+# ============================================================================
+
+# ============================================================================
+# PYTHON
+# ============================================================================
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.virtualenv/
+
+# Pytest cache
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ============================================================================
+# DOCKER
+# ============================================================================
+# Keep docker/ directory but ignore build artifacts
+*.log
+
+# ============================================================================
+# IDE / EDITORS
+# ============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ============================================================================
+# ENVIRONMENT
+# ============================================================================
+.env
+*.env
+!.env.example
+
+# ============================================================================
+# TEMPORARY / DEBUG FILES (Hide Extra Scripts)
+# ============================================================================
+# Debug scripts (not required by assignment)
+debug_*.py
+test_rpc.py
+test_manual_vote.py
+test_deadlock.py
+test_system.py
+check_*.py
+quick_check.py
+
+# Emergency/temporary fixes
+emergency_fix.txt
+raft_election_fix.txt
+
+# Extra PowerShell scripts (keep only required ones)
+restart_cluster.ps1
+watch_logs.ps1
+
+# ============================================================================
+# DOCUMENTATION - KEEP ONLY ESSENTIAL
+# ============================================================================
+# Keep required docs per assignment:
+# - architecture.md (main)
+# - api_spec.yaml
+# - deployment_guide.md
+# - pbft_guide.md (BONUS feature documentation)
+
+# Hide redundant architecture docs (keep main ones)
+docs/ARSITEKTUR_VISUAL.md
+docs/PBFT_VS_RAFT_LEADER.md
+docs/ARCHITECTURE_CHECKLIST.md
+
+# Keep:
+# ✓ docs/architecture.md (REQUIRED - main architecture)
+# ✓ docs/api_spec.yaml (REQUIRED - API spec)
+# ✓ docs/deployment_guide.md (REQUIRED - deployment)
+# ✓ docs/pbft_guide.md (BONUS - PBFT documentation)
+# ✓ docs/PBFT_ARCHITECTURE.md (BONUS - PBFT architecture)
+
+# ============================================================================
+# REPORTS & GUIDES
+# ============================================================================
+# Hide extra reports (keep final report only)
+TESTING_GUIDE.md
+
+# Keep:
+# ✓ README.md (REQUIRED)
+# ✓ FINAL_REPORT.md (can be converted to report.pdf)
+
+# ============================================================================
+# RUNTIME / LOGS
+# ============================================================================
+*.log
+logs/
+*.sqlite
+*.db
+
+# Redis data
+redis-data/
+dump.rdb
+
+# ============================================================================
+# SYSTEM FILES
+# ============================================================================
+.ini
+*.bak
+*.tmp
+*.temp
+
+# ============================================================================
+# PROJECT SPECIFIC - Hide Non-Essential
+# ============================================================================
+# Setup scripts (not required for submission)
+setup.py
+pyproject.toml
+
+# Browser automation recordings
+*.webp
+artifacts/
+
+# Node modules (if any)
+node_modules/
+
+# ============================================================================
+# KEEP THESE ESSENTIAL FILES
+# ============================================================================
+# Core source code (ALL KEPT)
+# ✓ src/**/*.py
+
+# Tests (ALL KEPT)  
+# ✓ tests/**/*.py
+
+# Docker (ALL KEPT)
+# ✓ docker/Dockerfile.node
+# ✓ docker-compose.yml
+
+# Benchmarks (ALL KEPT)
+# ✓ benchmarks/**/*.py
+
+# Configuration (KEPT)
+# ✓ requirements.txt
+# ✓ .env.example
+
+# Scripts (KEEP ESSENTIAL ONLY)
+# ✓ run_node1.ps1
+# ✓ run_node2.ps1
+# ✓ run_node3.ps1
+# ✓ start_local_cluster.ps1
+# ✓ run_tests.ps1
+# ✓ demo_pbft.ps1 (BONUS feature demo)
+
+# Documentation (KEEP ESSENTIAL)
+# ✓ README.md
+# ✓ FINAL_REPORT.md
+# ✓ docs/architecture.md
+# ✓ docs/api_spec.yaml
+# ✓ docs/deployment_guide.md
+# ✓ docs/pbft_guide.md (BONUS)
+# ✓ docs/PBFT_ARCHITECTURE.md (BONUS)
+
+# ============================================================================
+# SUMMARY OF KEPT FILES
+# ============================================================================
+# This .gitignore ensures only assignment-required files + PBFT bonus
+# are visible in the repository.
+#
+# CORE (70 pts):
+#   - Lock Manager: src/nodes/lock_manager.py + src/consensus/raft.py
+#   - Queue System: src/nodes/queue_node.py
+#   - Cache: src/nodes/cache_node.py
+#   - Docker: docker/, docker-compose.yml
+#
+# DOCUMENTATION (20 pts):
+#   - docs/architecture.md (with diagrams)
+#   - docs/api_spec.yaml
+#   - docs/deployment_guide.md
+#   - FINAL_REPORT.md (performance analysis)
+#
+# BONUS (+10 pts):
+#   - src/consensus/pbft.py (implementation)
+#   - src/nodes/pbft_node.py
+#   - docs/pbft_guide.md
+#   - docs/PBFT_ARCHITECTURE.md
+#   - demo_pbft.ps1
+#
+# TOTAL VISIBLE: Essential files only, professionally organized
+# ============================================================================

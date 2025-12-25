@@ -1,49 +1,101 @@
-version: '3.8'
-
 services:
   # 1. Service untuk Redis
   redis:
     image: "redis:alpine"
     ports:
-      - "6379:6379" # Membuka port Redis ke komputer Anda
+      - "6379:6379"
     volumes:
-      - redis_data:/data # Ini penting untuk message persistence
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      distributed_net:
+        aliases:
+          - redis
 
   # 2. Service untuk Node Aplikasi Pertama
   node1:
     build:
-      context: ..  # Build dari parent directory (folder root proyek)
-      dockerfile: docker/dockerfile.node # Path ke Dockerfile Anda [cite: 122]
+      context: ..
+      dockerfile: docker/Dockerfile.node
     env_file:
-      - ../.env.node1 # Menggunakan file .env khusus untuk node1
+      - ../.env.node1
     ports:
-      - "8001:8001" # Map port 8001 di host ke 8001 di container
+      - "8001:8001"
     depends_on:
-      - redis # Pastikan Redis jalan dulu sebelum node ini
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8001/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      distributed_net:
+        aliases:
+          - node1
 
   # 3. Service untuk Node Aplikasi Kedua
   node2:
     build:
       context: ..
-      dockerfile: docker/dockerfile.node
+      dockerfile: docker/Dockerfile.node
     env_file:
-      - ../.env.node2 # Menggunakan file .env khusus untuk node2
+      - ../.env.node2
     ports:
       - "8002:8002"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8002/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      distributed_net:
+        aliases:
+          - node2
 
   # 4. Service untuk Node Aplikasi Ketiga
   node3:
     build:
       context: ..
-      dockerfile: docker/dockerfile.node
+      dockerfile: docker/Dockerfile.node
     env_file:
-      - ../.env.node3 # Menggunakan file .env khusus untuk node3
+      - ../.env.node3
     ports:
       - "8003:8003"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8003/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      distributed_net:
+        aliases:
+          - node3
+
+# Define custom network
+networks:
+  distributed_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
 
 # Mendefinisikan volume yang digunakan oleh service Redis
 volumes:

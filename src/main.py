@@ -9,6 +9,8 @@ from src.utils.config import get_settings
 # Import fungsi rute dari node lain
 from src.nodes.queue_node import add_queue_routes
 from src.nodes.cache_node import add_cache_routes
+from src.nodes.lock_manager import add_lock_routes
+from src.nodes.pbft_node import add_pbft_routes
 
 settings = get_settings()
 app = FastAPI(title=f"Node: {settings.node_id}")
@@ -17,7 +19,8 @@ app = FastAPI(title=f"Node: {settings.node_id}")
 # --- Hubungkan Rute dari Modul Lain ---
 add_queue_routes(app)
 add_cache_routes(app)
-# add_lock_routes(app)
+add_lock_routes(app)
+add_pbft_routes(app)
 # --------------------------------------
 
 
