@@ -6,8 +6,7 @@ Proyek ini mengimplementasikan sistem sinkronisasi terdistribusi yang mensimulas
 2. **Distributed Queue System** (Consistent Hashing)
 3. **Distributed Cache Coherence** (MESI Protocol)
 
-Sistem ini dijalankan dalam lingkungan Docker dengan dukungan Redis sebagai penyimpanan status global.
-Tujuannya adalah untuk mensimulasikan skenario real-world dari sistem terdistribusi dengan fokus pada konsistensi, fault tolerance, dan performa.
+Sistem ini dijalankan dalam lingkungan Docker dengan dukungan Redis sebagai penyimpanan status global. Tujuannya adalah untuk mensimulasikan skenario real-world dari sistem terdistribusi dengan fokus pada konsistensi, fault tolerance, dan performa.
 
 ---
 
@@ -27,39 +26,47 @@ Tujuannya adalah untuk mensimulasikan skenario real-world dari sistem terdistrib
 ## 🚀 Cara Menjalankan
 
 ### 1. Install Dependency
+
 ```bash
 pip install -e .
 ```
 
 ### 2. Jalankan Redis
+
 ```bash
 docker run -d -p 6379:6379 redis:6-alpine
 ```
 
 ### 3. Jalankan Virtual Environment
+
 ```bash
 .venv/Scripts/activate  # Windows
 ```
 
 ### 4. Build Docker Images (Pertama kali)
+
 ```bash
 cd docker
 docker-compose up --build
 ```
 
 ### 5. Jalankan Sistem (Sudah Build)
+
 ```bash
 cd docker
 docker-compose up
 ```
 
 ### 6. Verifikasi Sistem
+
 Setelah semua container berjalan, pastikan sistem aktif:
+
 ```bash
 docker ps
 ```
 
 Akses node via browser atau curl:
+
 ```bash
 curl http://localhost:8001/
 curl http://localhost:8002/
@@ -74,9 +81,10 @@ curl http://localhost:8003/
 
 ---
 
-## � API Examples
+## 📡 API Examples
 
 ### Distributed Locks
+
 ```bash
 # Acquire lock
 curl -X POST "http://localhost:8001/lock/mylock?lock_type=exclusive"
@@ -89,6 +97,7 @@ curl http://localhost:8001/locks
 ```
 
 ### Distributed Queue
+
 ```bash
 # Produce message
 curl -X POST http://localhost:8001/queue/orders \
@@ -100,6 +109,7 @@ curl http://localhost:8001/queue/orders
 ```
 
 ### Distributed Cache
+
 ```bash
 # Read cache
 curl http://localhost:8001/cache/item:123
@@ -111,6 +121,7 @@ curl -X POST http://localhost:8001/cache/item:999 \
 ```
 
 ### PBFT Consensus (BONUS)
+
 ```bash
 # Check PBFT status
 curl http://localhost:8001/pbft/status

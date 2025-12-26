@@ -1,136 +1,151 @@
 import redis
 import httpx
+import json
+import asyncio
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from src.utils.config import get_settings
 from src.utils.hashing import ConsistentHasher
 
-# Dapatkan settings
+# 1. Inisialisasi Settings & Client
 settings = get_settings()
 
-# Inisialisasi Redis Client
+# Inisialisasi Redis dengan Error Handling yang baik
 try:
     redis_client = redis.Redis(
         host=settings.redis_host,
         port=settings.redis_port,
         db=0,
-        decode_responses=True # Penting agar output Redis berupa string
+        decode_responses=True 
     )
     redis_client.ping()
-    print(f"✅ Node {settings.node_id} berhasil terhubung ke Redis.")
-except redis.exceptions.ConnectionError as e:
-    print(f"❌ Node {settings.node_id} GAGAL terhubung ke Redis: {e}")
+    print(f"✅ Node {settings.node_id}: Connected to Redis at {settings.redis_host}:{settings.port}")
+except redis.exceptions.ConnectionError:
+    print(f"❌ Node {settings.node_id}: Failed to connect to Redis.")
     redis_client = None
 
-# Inisialisasi Consistent Hashing Ring
-# Kita gunakan node_id sebagai nama node di ring
+# 2. Setup Consistent Hashing
+# Mengambil daftar node ID dari konfigurasi URL (misal: node1, node2, node3)
 node_ids = [url.split('//')[1].split(':')[0] for url in settings.all_nodes]
 hasher = ConsistentHasher(nodes=node_ids)
 
-# Fungsi untuk mem-forward request ke node yang benar
+# --- HELPER FUNCTIONS ---
+
 async def forward_request(node_id: str, request: Request):
-    """Meneruskan request ke node yang bertanggung jawab."""
-    # Dapatkan URL lengkap dari node_id
+    """Meneruskan request ke node yang bertanggung jawab berdasarkan Consistent Hashing."""
     node_url = next((url for url in settings.all_nodes if node_id in url), None)
     if not node_url:
-        raise HTTPException(status_code=500, detail="Node not found in config")
+        raise HTTPException(status_code=500, detail="Target node URL not found")
 
     async with httpx.AsyncClient() as client:
         try:
-            # Bangun ulang URL untuk di-forward
             url_path = request.url.path
             fwd_url = f"{node_url}{url_path}"
             
-            # Kirim request persis seperti aslinya
             fwd_response = await client.request(
                 method=request.method,
                 url=fwd_url,
-                headers=request.headers,
-                content=await request.body()
+                headers=dict(request.headers),
+                content=await request.body(),
+                timeout=10.0
             )
+            # Kembalikan response asli dari node target
             return fwd_response.json(), fwd_response.status_code
-        except httpx.RequestError as e:
-            raise HTTPException(status_code=503, detail=f"Gagal meneruskan request ke {node_id}: {e}")
+        except Exception as e:
+            raise HTTPException(status_code=503, detail=f"Forwarding error to {node_id}: {e}")
+
+# --- API ROUTES ---
 
 def add_queue_routes(app: FastAPI):
     
     @app.post("/queue/{queue_name}")
     async def produce(queue_name: str, message: dict, request: Request):
         """
-        Menambahkan pesan ke antrean.
-        Request akan di-forward jika node ini tidak bertanggung jawab.
+        Menambahkan pesan ke antrean. 
+        Menjamin pesan disimpan di node yang benar via Consistent Hashing.
         """
         if not redis_client:
-            raise HTTPException(status_code=503, detail="Service Redis tidak tersedia")
+            raise HTTPException(status_code=503, detail="Redis unavailable")
         
-        # 1. Tentukan node yang bertanggung jawab atas antrean ini
         responsible_node = hasher.get_node(queue_name)
         
-        # 2. Jika bukan node ini, forward request-nya
+        # Transparansi Lokasi: Jika bukan tugas node ini, teruskan ke pemiliknya
         if responsible_node != settings.node_id:
-            print(f"Node {settings.node_id} meneruskan request queue {queue_name} ke {responsible_node}")
-            json_response, status_code = await forward_request(responsible_node, request)
-            return JSONResponse(content=json_response, status_code=status_code)
+            print(f"[Queue] Proxying Produce '{queue_name}' -> {responsible_node}")
+            json_resp, status_code = await forward_request(responsible_node, request)
+            return JSONResponse(content=json_resp, status_code=status_code)
 
-        # 3. Jika ini node yang benar, proses
         try:
-            print(f"Node {settings.node_id} memproses queue {queue_name}")
-            redis_client.lpush(queue_name, str(message))
-            return {"status": "message produced", "queue": queue_name, "node": settings.node_id, "message": message}
+            # Serialisasi aman menggunakan JSON
+            payload = json.dumps(message)
+            redis_client.lpush(f"queue:{queue_name}", payload)
+            return {
+                "status": "produced", 
+                "queue": queue_name, 
+                "node": settings.node_id,
+                "message": message
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
     @app.get("/queue/{queue_name}")
     async def consume(queue_name: str, request: Request):
         """
-        Mengambil pesan dari antrean (at-least-once delivery).
-        Request akan di-forward jika node ini tidak bertanggung jawab.
+        Mengambil pesan dengan semantik At-Least-Once Delivery.
+        Menggunakan RPOPLPUSH untuk menjamin pesan tidak hilang jika terjadi crash.
         """
         if not redis_client:
-            raise HTTPException(status_code=503, detail="Service Redis tidak tersedia")
+            raise HTTPException(status_code=503, detail="Redis unavailable")
 
         responsible_node = hasher.get_node(queue_name)
         
         if responsible_node != settings.node_id:
-            print(f"Node {settings.node_id} meneruskan request queue {queue_name} ke {responsible_node}")
-            json_response, status_code = await forward_request(responsible_node, request)
-            return JSONResponse(content=json_response, status_code=status_code)
+            print(f"[Queue] Proxying Consume '{queue_name}' -> {responsible_node}")
+            json_resp, status_code = await forward_request(responsible_node, request)
+            return JSONResponse(content=json_resp, status_code=status_code)
 
         try:
-            print(f"Node {settings.node_id} memproses queue {queue_name}")
+            main_queue = f"queue:{queue_name}"
+            processing_queue = f"processing:{settings.node_id}:{queue_name}"
             
-            # Pola At-Least-Once Delivery [cite: 1071]
-            # Pindahkan pesan ke antrean 'processing' sementara
-            processing_queue = f"{queue_name}:processing"
-            message = redis_client.rpoplpush(queue_name, processing_queue)
+            # ATOMIC OPERATION: Pindahkan dari main ke processing queue
+            # Menjamin pesan tetap ada di Redis jika node/network mati sebelum ACK
+            message_raw = redis_client.rpoplpush(main_queue, processing_queue)
             
-            if message:
-                # Berikan pesan dan token (nama antrean processing) ke klien
-                # Klien harus call /queue/ack/{queue_name} untuk konfirmasi
-                return {
-                    "status": "message consumed", 
-                    "node": settings.node_id,
-                    "message": eval(message), # eval() mengubah string dict kembali jadi dict
-                    "ack_token": processing_queue # Klien butuh ini untuk ACK
+            if not message_raw:
+                return {"status": "empty", "queue": queue_name}
+
+            return {
+                "status": "consumed",
+                "node": settings.node_id,
+                "data": json.loads(message_raw), # Aman: Menggunakan json.loads, bukan eval()
+                "ack_token": {
+                    "processing_queue": processing_queue,
+                    "raw_data": message_raw
                 }
-            else:
-                raise HTTPException(status_code=404, detail="Queue is empty or does not exist")
+            }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    @app.post("/queue/ack/{processing_queue}")
-    async def acknowledge(processing_queue: str, message: dict):
+    @app.post("/queue/ack")
+    async def acknowledge(ack_data: dict):
         """
-        Konfirmasi bahwa pesan telah selesai diproses (menghapusnya dari antrean processing).
+        Menghapus pesan dari antrean 'processing' setelah berhasil diproses.
         """
         if not redis_client:
-            raise HTTPException(status_code=503, detail="Service Redis tidak tersedia")
+            raise HTTPException(status_code=503, detail="Redis unavailable")
         
         try:
-            # Hapus pesan spesifik dari antrean processing
-            # LREM 0 = hapus semua instance dari value
-            redis_client.lrem(processing_queue, 0, str(message))
-            return {"status": "message acknowledged"}
+            p_queue = ack_data.get("processing_queue")
+            raw_data = ack_data.get("raw_data")
+            
+            # Hapus pesan dari antrean sementara
+            result = redis_client.lrem(p_queue, 1, raw_data)
+            
+            if result > 0:
+                return {"status": "acknowledged", "message": "Pesan dihapus dari processing queue"}
+            else:
+                return {"status": "failed", "message": "Pesan tidak ditemukan di processing queue"}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))

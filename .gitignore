@@ -109,8 +109,6 @@ watch_logs.ps1
 # - pbft_guide.md (BONUS feature documentation)
 
 # Hide redundant architecture docs (keep main ones)
-docs/ARSITEKTUR_VISUAL.md
-docs/PBFT_VS_RAFT_LEADER.md
 docs/ARCHITECTURE_CHECKLIST.md
 
 # Keep:
